@@ -1,4 +1,10 @@
-﻿'use strict'
+﻿/**
+ * ACTION v0.1.0
+ * (c) 2015 Stefan Keim (aka indus)
+ * powered by DLR-DFD 
+ */
+
+'use strict'
 
 if (typeof CustomEvent !== "function") {
   (function () {
@@ -58,6 +64,12 @@ interface IActionEventDetails {
   /** timestamp of the event */
   timestamp: number;
 }
+
+/** 
+ * **ACTION [v0.1.0]**
+ * is an abstraction layer to unify *mouse*, *wheel*, *touch* and *pointer* events and simulate *inertia* (designd - not only - but especially for map interaction).
+ * Provide a callback or listen to a CustomEvent named ```'action'``` on ``` window ``` to get ActionEvents.
+ */
 
 class Action {
   
@@ -284,8 +296,9 @@ module Action {
   export enum EVTYPE {
     START = 1,
     MOVE = 2,
-    END = 4,
-    CANCEL = 8  /* not in use */
+    END = 4, 
+    /** not in use */
+    CANCEL = 8
   };
 
   export class AInput {

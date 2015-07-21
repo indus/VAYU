@@ -1,4 +1,9 @@
 ﻿///#source 1 1 /src/ACTION.js
+/**
+ * ACTION v0.1.0
+ * (c) 2015 Stefan Keim (aka indus)
+ * powered by DLR-DFD
+ */
 'use strict';
 var __extends = this.__extends || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -18,6 +23,11 @@ if (typeof CustomEvent !== "function") {
         window["CustomEvent"] = CustomEvent;
     })();
 }
+/**
+ * **ACTION [v0.1.0]**
+ * is an abstraction layer to unify *mouse*, *wheel*, *touch* and *pointer* events and simulate *inertia* (designd - not only - but especially for map interaction).
+ * Provide a callback or listen to a CustomEvent named ```'action'``` on ``` window ``` to get ActionEvents.
+ */
 var Action = (function () {
     /** @param callback if no callback is provided a CustomEvent with IActionEventDetails is dispatched on ```window``` instead */
     function Action(target, callback, options) {
@@ -214,7 +224,8 @@ var Action;
         EVTYPE[EVTYPE["START"] = 1] = "START";
         EVTYPE[EVTYPE["MOVE"] = 2] = "MOVE";
         EVTYPE[EVTYPE["END"] = 4] = "END";
-        EVTYPE[EVTYPE["CANCEL"] = 8] = "CANCEL"; /* not in use */
+        /** not in use */
+        EVTYPE[EVTYPE["CANCEL"] = 8] = "CANCEL";
     })(Action.EVTYPE || (Action.EVTYPE = {}));
     var EVTYPE = Action.EVTYPE;
     ;
@@ -419,5 +430,34 @@ var Action;
 })(Action || (Action = {}));
 //# sourceMappingURL=ACTION.js.map
 ///#source 1 1 /src/VAYU.js
-console.log("VAYU");
+/**
+ * VAYU v0.3.0
+ * (c) 2015 Stefan Keim (aka indus)
+ * powered by DLR-DFD
+ */
+/// <reference path="../org/vue.d.ts" />
+/// <reference path="action.ts" />
+'use strict';
+var __extends = this.__extends || function (d, b) {
+    for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
+    function __() { this.constructor = d; }
+    __.prototype = b.prototype;
+    d.prototype = new __();
+};
+var VAYU = (function (_super) {
+    __extends(VAYU, _super);
+    function VAYU() {
+        _super.apply(this, arguments);
+    }
+    return VAYU;
+})(Vue);
+var VAYU;
+(function (VAYU) {
+    VAYU.version = "0.3.0";
+    console.log("%c VAYU [" + VAYU.version + "] ", "color:#42b983;background-color:#333;font-weight:bold;font-size:20px;");
+})(VAYU || (VAYU = {}));
+Math.R2D = 180 / Math.PI;
+Math.D2R = Math.PI / 180;
+Math.PIx2 = Math.PI * 2;
+Math.PI_2 = Math.PI / 2;
 //# sourceMappingURL=VAYU.js.map
