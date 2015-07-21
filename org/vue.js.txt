@@ -1,0 +1,2 @@
+﻿find vue.js at http://vuejs.org/ or https://github.com/yyx990803/vue
+current version used in VAYU: 12.7
