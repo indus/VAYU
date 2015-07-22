@@ -1,4 +1,4 @@
-﻿// 0.12.1
+﻿// 0.12.x
 
 declare class Vue {
 
@@ -100,7 +100,7 @@ declare class Vue {
     isPlainObject: (obj) => any;
     isReserved: (str) => any;
     isTemplate: (el) => any;
-    log: (msg) => any;
+    log: (...msg) => any;
     mergeOptions: (parent, child, vm) => any;
     nextTick: (cb, ctx) => any;
     off: (el, event, cb) => any;
@@ -124,13 +124,14 @@ declare class Vue {
   public $: any;
   public $$: any;
   public $data: any;
-  public $el: any;
+  public $el:HTMLElement;
   public $options: any;
-  public $parent: any;
-  public $root: any;
+  public $parent: Vue;
+  public $root: Vue;
+  public $children: Vue[];
 
   // public methods
-  public $add: (key, val) => any;
+  public $add: (key, val?) => any;
   public $addChild: (opts, BaseCtor) => any;
   public $after: (target, cb, withTransition) => any;
   public $appendTo: (target, cb, withTransition) => any;

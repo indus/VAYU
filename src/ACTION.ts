@@ -5,7 +5,6 @@
  */
 
 'use strict'
-
 if (typeof CustomEvent !== "function") {
   (function () {
     function CustomEvent(event: string, params: any) {
@@ -117,7 +116,7 @@ class Action {
 
     /* WHEEL (direct implementation; no inertia) */
     if ((options.onwheel && Action.SPRT_MOUSE) || (options.onwheel === 1)) {
-      Action.AInput.addListeners(target, "mousewheel DOMMouseScroll", (ev: MouseWheelEvent) => {
+      Action.Input.addListeners(target, "mousewheel DOMMouseScroll", (ev: MouseWheelEvent) => {
         var p;
         var $: any = {
           s: Math.pow(1.2, Math.max(-1, Math.min(1, (ev.wheelDelta || -ev.detail)))),
@@ -166,7 +165,6 @@ class Action {
         
     // calc XY if points available (otherwise use last)
     if (points.length) {
-
       c.pX = points[0].pageX;
       c.pY = points[0].pageY;
       c.cX = points[0].clientX;
@@ -204,27 +202,25 @@ class Action {
     // fire event;
     this._cb($);
 
+
     /* INERTIA */
     if (this._inertia) {
       var q = this._queue, iFn: any = this._inertiaFn;
-
+      
       // apply
       if ($.isLast) {
         var now = performance.now();
         // exit if to few events || to frequent last-event || or translate-only inertia
-        if (q.length < 3 || (iFn.active && (now - iFn.active) < 20) || (points.length && (this._inertia < 0))) {
-          iFn.active = now;
+        if (q.length < 3 || (iFn.active && (now - iFn.active) < 20) || (points.length && (this._inertia < 0)))
           return;
-        }
 
         // calc velocities
         var t = Date.now();
         for (var i = q.length - 1, dT; i > 1; i--) {
           dT = Math.max(t - q[i].timestamp, 1);
-
           c.vx = (c.vx + q[i].x / dT) / 2;
           c.vy = (c.vy + q[i].y / dT) / 2;
-          if (points.length) {
+          if (q[i].isMulti) {
             c.vs = (c.vs + (q[i].s - 1) / dT) / 2;
             c.vr = (c.vr + q[i].r / dT) / 2;
           }
@@ -233,7 +229,6 @@ class Action {
         c.vr = Math.max(-3e-3, Math.min(3e-3, c.vr));
 
         q.length = 0;
-
         // start inertia
         if (!iFn.active) {
           iFn.active = now;
@@ -255,10 +250,10 @@ class Action {
   }
 
   private _inertiaFn(t: number, pnow: number) {
-    var ev = this._ev, c = this._cache;
+    var ev = this._ev, c = this._cache, iFn = <any>this._inertiaFn;
 
     // intermediate event
-    if ((<any>this._inertiaFn).active &&
+    if (iFn.active &&
       Math.abs(c.vx) > 1.5e-2 ||
       Math.abs(c.vy) > 1.5e-2 ||
       Math.abs(c.vr) > 3e-4 ||
@@ -278,9 +273,8 @@ class Action {
 
       // last event
     } else {
-      (<any>this._inertiaFn).active = 0;
-      ev.isLast = true;
-      ev.x = ev.y = ev.r = 0;
+      ev.isLast = !!iFn.active ;
+      iFn.active = ev.x = ev.y = ev.r = 0;
       ev.s = 1;
     }
 
@@ -301,7 +295,7 @@ module Action {
     CANCEL = 8
   };
 
-  export class AInput {
+  export class Input {
     protected static evMap: any;
     protected static evTGT: string;
     protected static evWIN: string;
@@ -333,10 +327,10 @@ module Action {
       var win = tgt.ownerDocument.defaultView || tgt.ownerDocument.parentWindow;
 
       // start on target
-      AInput.addListeners(tgt, static_.evTGT, this.listener, false);
+      Input.addListeners(tgt, static_.evTGT, this.listener, false);
 
       // move & end on global view
-      AInput.addListeners(win, static_.evWIN, this.listener, false);
+      Input.addListeners(win, static_.evWIN, this.listener, false);
     }
 
     // copy params of ev to $
@@ -356,7 +350,7 @@ module Action {
 
   export module Input {
 
-    export class Mouse extends AInput {
+    export class Mouse extends Input {
       private static evMAP = {
         mousedown: EVTYPE.START,
         mousemove: EVTYPE.MOVE,
@@ -439,7 +433,7 @@ module Action {
       }
     }
 
-    export class Touch extends AInput {
+    export class Touch extends Input {
       private static evMAP = {
         touchstart: EVTYPE.START,
         touchmove: EVTYPE.MOVE,
@@ -467,7 +461,7 @@ module Action {
       }
     }
 
-    export class Point extends AInput {
+    export class Point extends Input {
       private static evMAP = {
         pointerdown: EVTYPE.START,
         pointermove: EVTYPE.MOVE,
