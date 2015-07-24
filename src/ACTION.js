@@ -74,7 +74,10 @@ var Action = (function () {
         }
     }
     Action.prototype._callback = function (type, points) {
-        var c = this._cache;
+        var self = this;
+        if (self.idle)
+            return;
+        var c = self._cache;
         // prepare event details
         var $ = {
             x: 0,
@@ -124,15 +127,15 @@ var Action = (function () {
         c.d = d;
         c.r = r;
         // fire event;
-        this._cb($);
+        (self.idle !== -1) && this._cb($);
         /* INERTIA */
         if (this._inertia) {
-            var q = this._queue, iFn = this._inertiaFn;
+            var q = this._queue, iFn = self._inertiaFn;
             // apply
             if ($.isLast) {
                 var now = performance.now();
                 // exit if to few events || to frequent last-event || or translate-only inertia
-                if (q.length < 3 || (iFn.active && (now - iFn.active) < 20) || (points.length && (this._inertia < 0)))
+                if (q.length < 3 || (iFn.active && (now - iFn.active) < 20) || (points.length && (self._inertia < 0)))
                     return;
                 // calc velocities
                 var t = Date.now();
@@ -155,8 +158,8 @@ var Action = (function () {
                     $.isMulti = !!points.length;
                     delete $.points;
                     delete $.timestamp;
-                    this._ev = $;
-                    this._inertiaFn(0, now);
+                    self._ev = $;
+                    self._inertiaFn(0, now);
                     $.isFirst = false;
                 }
             }
@@ -215,6 +218,8 @@ var Action = (function () {
 })();
 var Action;
 (function (Action) {
+    Action.version = "0.1.0";
+    console.log("%c ACTION [" + Action.version + "] ", "color:#42b983;background-color:#333;font-weight:bold;font-size:15px;");
     // Definition of Event-Types
     (function (EVTYPE) {
         EVTYPE[EVTYPE["START"] = 1] = "START";

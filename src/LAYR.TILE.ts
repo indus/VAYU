@@ -1,14 +1,14 @@
-﻿/// <reference path="vayu.ts" />
-
+﻿
 module VAYU.LAYR {
 
-  @DVue(VAYU.LAYR)
   export class TILE extends VAYU.LAYR {
 
     protected static rctx = RCTX.TYPE.CANVAS;
 
-    protected _cache: any;
-    protected _tbox: any;
+    private _cache: any;
+    private _tbox: any;
+
+    public zoff: number;
 
     public url: (x: number, y: number, z: number) => string;
     public bbox: [number, number, number, number];
@@ -16,19 +16,20 @@ module VAYU.LAYR {
     public render(ctx: CanvasRenderingContext2D, v: View) {
 
       var vdim = v.dim,
-        tdim = vdim * v.s * 1.004,
+        tdim = vdim * v.s, // * 1.004,
         m0 = v.m[0] * vdim,
         m1 = v.m[1] * vdim,
         m2 = v.m[2],
         m3 = v.m[3],
-        th = (Math.abs(Math.cos(v.r)) + Math.abs(Math.sin(v.r))) * tdim / 2,
+        th = v.th,
         url = this.url,
         cache = this._cache,
         reqQueue = this.$root.reqQueue,
-        z = 0, x = 0, y = 0,
         dir = true,
-        min = Math.max(0, Math.min(18, Math.round(v.z))),
-        bbox = this._tbox ? this._tbox[Math.round(v.z)] : null;
+        z = Math.round(v.z+this.zoff),
+        min = Math.max(0, Math.min(19, z)),
+        bbox = this._tbox ? this._tbox[z] : null,
+        z = 0, x = 0, y = 0;
 
       if(typeof url !== "function") return;
 
@@ -51,13 +52,19 @@ module VAYU.LAYR {
             if ((img = cache[(cid = z + "." + x + "." + y)]) && img.complete && img.width && img.height) { // tile is ready to draw
               ctx.drawImage(img, -tdim / 2, -tdim / 2, tdim, tdim);
 
-              if (!cache[cid = (z - 1 + "." + (x >> 1) + "." + (y >> 1))] && (reqQueue.length < (reqQueue.max / 2)) && (src = url(z, x, y))) {
-                img = new Image();
-                img.src = src;
-                img["preload"] = true;
-                img.onload = img.onerror = this._onTile;
-                reqQueue.push(cache[cid] = img);
+              if ((reqQueue.length < (reqQueue.max / 2))) {
+
+                // parent
+                if (!cache[cid = (z - 1 + "." + (x >> 1) + "." + (y >> 1))] && (src = url(z - 1, x >> 1, y >> 1))) {
+                  img = new Image();
+                  img.src = src;
+                  img["preload"] = true;
+                  img.onload = img.onerror = this._onTile;
+                  reqQueue.push(cache[cid] = img);
+                }
               }
+
+              
             } else {
               // request tile
               if ((img === undefined) && (reqQueue.length < reqQueue.max) && (src = url(z, x, y))) {
@@ -69,7 +76,7 @@ module VAYU.LAYR {
 
               // draw first available parent tile
               var _z = z, _x = x, _y = y, __f = 1, __x = 0, __y = 0, _dim;
-              while (_z > 0) { //  [TODO] limit to certain number of parents
+              while (_z > 0) { //  limit to certain number of parents with Math.max(z-n,0)
                 __x += (_x & 1) * __f;
                 __y += (_y & 1) * __f;
                 __f *= 2;
@@ -133,28 +140,28 @@ module VAYU.LAYR {
       var bbox_ = [(bbox[0] + 180) / 360,
         (1 - Math.log(Math.tan(bbox[1] * Math.D2R) + 1 / Math.cos(bbox[1] * Math.D2R)) / Math.PI) / 2,
         (bbox[2] + 180) / 360,
-        (1 - Math.log(Math.tan(bbox[3] * Math.D2R) + 1 / Math.cos(bbox[3] * Math.D2R)) / Math.PI) / 2]´;
+        (1 - Math.log(Math.tan(bbox[3] * Math.D2R) + 1 / Math.cos(bbox[3] * Math.D2R)) / Math.PI) / 2];
 
       for (var i = 0, z = 0; i <= 18; i++ , z = (1 << i)) {
         this._tbox[i] = [Math.floor(bbox_[0] * z), Math.floor(bbox_[1] * z), Math.floor(bbox_[2] * z), Math.floor(bbox_[3] * z)];
       }
     }
 
-    protected static methods = {
+    static methods = {
       render: TILE.prototype.render,
       _onTile: TILE.prototype._onTile,
       _onUrl: TILE.prototype._onUrl,
       _onBBox: TILE.prototype._onBBox
     }
 
-    protected static events: any = {
+   static events = {
       "hook:created": function () {
         var self: TILE = this;
 
         self.url || self.$add('url');
         self.$watch('url', self._onUrl, { immediate: true });
 
-        self.bbox && self.$watch('bbox', self._bbox2tbox, { immediate: true });
+        self.bbox && self.$watch('bbox', self._onBBox, { immediate: true });
         //self.src && self.$watch('src', self._src2url, { immediate: true });
 
       },
@@ -164,5 +171,5 @@ module VAYU.LAYR {
     }
   }
 
-  VAYU.component("vayu-TILE", TILE);
+  VAYU.component("vayu-TILE", TSC2COMP(TILE, LAYR));
 }

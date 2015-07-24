@@ -1,4 +1,9 @@
 ﻿/// <reference path="../org/vue.d.ts" />
+/// <reference path="action.ts" />
+/// <reference path="rctx.ts" />
+/// <reference path="layr.ts" />
+/// <reference path="layr.tile.ts" />
+/// <reference path="layr.geojson.ts" />
 
 /** 
  * VAYU v0.3.0
@@ -24,32 +29,48 @@ Math.D2R = Math.PI / 180;
 Math.PIx2 = Math.PI * 2;
 Math.PI_2 = Math.PI / 2;
 
-/** ES6 VueComponent decorator */
-function DVue(sup?: any, opt?: any) {
-  var sup = sup || Vue;
-  return function (voptclass) {
-    return sup
-      .extend(Object
-        .keys(voptclass)
-        .reduceRight(function (opt, key) {
-          sup.hasOwnProperty(key) || (opt[key] = voptclass[key]);
-          return opt
-        }, opt || { name: voptclass.name }))
-  }
-};
 
 
+//Monkey patch IE for support for Function.name
+if (Function.prototype["name"] === undefined && Object.defineProperty !== undefined) {
+  Object.defineProperty(Function.prototype, 'name', {
+    get: function () {
+      var funcNameRegex = /function\s([^(]{1,})\(/;
+      var results = (funcNameRegex).exec((this).toString());
+      return (results && results.length > 1) ? results[1].trim() : "";
+    },
+    set: function (value) { }
+  });
+}
+
+
+/* ES6 VueComponent decorator */
+function TSC2COMP(tsc, nsp?, opt?) {
+  var ppc = Object.getPrototypeOf(tsc.prototype).constructor;
+  var opt = Object
+    .keys(tsc)
+    .reduceRight(function (opt, key) {
+      ppc.hasOwnProperty(key) || (opt[key] = tsc[key]);
+      return opt;
+    }, opt || { name: tsc.name })
+  var vc = ppc.extend(opt);
+  nsp && (nsp[opt.name] = vc);
+  return vc;
+}
+
+function DVue(sup?: any, opt?: any): any { return TSC2COMP };
 
 /**
  * **VAYU** [0.3.0] - the main class
  * */
 @DVue()
 class VAYU extends Vue {
-  static temp = (id: string): HTMLElement => (document["currentScript"] || document.body).ownerDocument.getElementById("vayu_" + id);
-  static template: HTMLElement = VAYU.temp("VAYU");
+  //static temp = (id: string): HTMLElement => (document["currentScript"] || document.body).ownerDocument.getElementById("vayu_" + id);
+  static template = '<div class="vayu"v-class="action:class_action,inertia:class_inertia"><svg style="display:none"><defs><circle id="point"r="5"/></defs></svg><div v-repeat="layers|rctx"v-component="{{\'vayu-rctx-\'+_rctx}}"track-by="_uid"></div><content/></div>'; //VAYU.temp("VAYU");
   static replace: boolean = true;
 
   public _uid: number;
+  public action: Action;
 
   /** array of pending images with an additional property ```max``` to limit the number of concurrent requests */
   public reqQueue: (any[]| any);
@@ -107,9 +128,9 @@ class VAYU extends Vue {
         if (!rctx) return;
 
         var _uid = layers[i]._uid;
-        if (!_uid) {
+        if (_uid === undefined) {
           Object.defineProperty(layers[i], '_uid',
-            { value: _uid = this.$root._uid++ });
+            { value: _uid = ++this.$root._uid });
         }
         if (layergroup && layergroup._rctx == rctx) {
           layergroup.layers.push(layers[i]);
@@ -153,7 +174,7 @@ class VAYU extends Vue {
   // LIFECYCLE
 
   protected static created = function () {
-    VAYU.unveil(this,"created");
+    VAYU.unveil(this, "created");
     var self: VAYU = this;
     self._uid = 0;
   }
@@ -173,10 +194,10 @@ class VAYU extends Vue {
     self._onResize();
 
 
-    this.$watch("layers", this.$root.update, { deep: true })
+    self.$watch("layers", this.$root.update, { deep: true })
 
     // init action handler (Action unifies various user inputs for map transform)
-    var action = new Action(self.$el, (d: IActionEventDetails) => {
+    self.action = new Action(self.$el, (d: IActionEventDetails) => {
       // apply action event to map transform;
       self.view.transform(d.x, d.y, d.s, d.r, d.clientX, d.clientY);
 
@@ -184,7 +205,15 @@ class VAYU extends Vue {
         this.class_action = d.isFirst && !d.isWheel;
         this.class_inertia = d.isFirst && d.isInertia;
       }
+
     });
+
+    /*self.action.idle = -1;
+    setTimeout(function () {
+
+      self.action.idle = false;
+
+    }, 1500)*/
 
     // init the map transform
     var o = self.$options,
@@ -197,7 +226,6 @@ class VAYU extends Vue {
   }
 }
 
-
 module VAYU {
 
   export const version: string = "0.3.0";
@@ -205,7 +233,7 @@ module VAYU {
 
   export var config = {
     debug: true,
-    verbose:true,
+    verbose: true || { ready: true },
   };
 
   export var log = function (...msg) {
@@ -213,14 +241,16 @@ module VAYU {
   }
 
   export var unveil = function (comp, hook?, desc?) {
-      VAYU.config.verbose && console.log("[" + ((desc||'') + comp.constructor.name) + (comp.id ? (" '" + comp.id + "' ") : " ") + hook + "]", comp);
+    ((VAYU.config.verbose === true) ||
+      (VAYU.config.verbose && VAYU.config.verbose[hook]))
+    && console.log("[" + ((desc || '') + comp.constructor.name) + (comp.id ? (" '" + comp.id + "' ") : " ") + hook + "]", comp);
   }
 
   export class View {
-    m: Float64Array = new Float64Array([1, 0, 0, 0, 1]); // transform matrix (a = d = m[0], c = -(b = [1]), e = [2], f = [3], d=[4])
-    ṁ: Float64Array = new Float64Array(4); // inverse transform matrix
-    m_: Float64Array = new Float64Array(5); // temp
-    ṁ_: Float64Array = new Float64Array(4); // temp
+    m = new Array(1, 0, 0, 0, 1);//: Float64Array = new Float64Array([1, 0, 0, 0, 1]); // transform matrix (a = d = m[0], c = -(b = [1]), e = [2], f = [3], d=[4])
+    ṁ = new Array(4);//: Float64Array = new Float64Array(4); // inverse transform matrix
+    m_ = new Array(5);//: Float64Array = new Float64Array(5); // temp
+    ṁ_ = new Array(4);//: Float64Array = new Float64Array(4); // temp
     //ṃ: Float64Array = new Float64Array([1, 0, 0, 0]); // delta transform matrix
     //ṃ_: Float64Array = new Float64Array(4); // temp
     s: number = 1; // scale as float
@@ -242,6 +272,7 @@ module VAYU {
     restrictCntr: any = true;  // restrict center (true = keep map on screen, "strict"= keep screen-center on map )
     dim: number;
     dimc: number;
+    th: number;
     crs: CRS.ACRS;
     update: boolean = true;
 
@@ -346,6 +377,7 @@ module VAYU {
         v.s = s;
         v.z = z;
         v.r = r;
+        v.th = (Math.abs(Math.cos(v.r)) + Math.abs(Math.sin(v.r))) * (v.dim * v.s) / 2;
       }
 
       v.update && (v.update = Vue.nextTick(this.apply, this));
@@ -354,15 +386,14 @@ module VAYU {
     public apply() {
       var v = this, m = v.m, ṁ = v.ṁ; //, ṃ = v.ṃ;
 
-
-      Vue.config.async = false;
+      //Vue.config.async = false;
       v.update = true;
       v.tranMX = "matrix(" + m[0] + "," + m[1] + "," + -m[1] + "," + m[0] + "," + m[2] + "," + m[3] + ")";
       //v.tranMX_ = "matrix(" + ṃ[0] + "," + ṃ[1] + "," + -ṃ[1] + "," + ṃ[0] + "," + ṃ[2] + "," + ṃ[3] + ")";
       v.tranUX = "matrix(" + ṁ[0] + "," + ṁ[1] + "," + -ṁ[1] + "," + ṁ[0] + ",0,0)";
       v.tranUS = "scale(" + 1 / v.s + ")";
       v.tranUR = "rotate(" + -v.r / Math.D2R + ")";
-      Vue.config.async = true;
+      //Vue.config.async = true;
     }
 
     // check if point is in rect (with threshold)
@@ -375,9 +406,9 @@ module VAYU {
     /* PROJECTIONS */
 
     // project a point 
-    public proj(p: [number, number], m: Float64Array): [number, number] { return [this.projX(p, m), this.projY(p, m)]; }
-    public projX(p: [number, number], m: Float64Array): number { return m[0] * p[0] - m[1] * p[1] + m[2]; }
-    public projY(p: [number, number], m: Float64Array): number { return m[1] * p[0] + m[0] * p[1] + m[3]; }
+    public proj(p: [number, number], m: (Float64Array|number[])): [number, number] { return [this.projX(p, m), this.projY(p, m)]; }
+    public projX(p: [number, number], m: (Float64Array|number[])): number { return m[0] * p[0] - m[1] * p[1] + m[2]; }
+    public projY(p: [number, number], m: (Float64Array|number[])): number { return m[1] * p[0] + m[0] * p[1] + m[3]; }
 
     public l2g(p: [number, number]): [number, number] { return this.proj(p, this.m); }
 
@@ -490,6 +521,6 @@ module VAYU {
         return (2 * Math.atan(Math.exp(y / this.__R)) - Math.PI_2) * Math.R2D;
       }
     }
-
   }
 };
+

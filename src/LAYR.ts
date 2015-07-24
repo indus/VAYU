@@ -1,7 +1,7 @@
-﻿module VAYU{
+﻿
+module VAYU {
   "use strict"
 
-  @DVue()
   export class LAYR extends Vue {
 
     public _uid: number;
@@ -9,16 +9,20 @@
     public $root: VAYU;
     public $parent: VAYU.RCTX;
 
+    public id: string;
+    public type: string;
+    public component: string;
+
     public hide: boolean;
     public style: any;
 
     public render(ctx?, view?) { }
 
-    private static methods = {
+    static methods: any = {
       render: LAYR.prototype.render
     }
 
-    protected static events = {
+    static events: any = {
       "hook:created": function () {
         VAYU.unveil(this, "created");
         var self: LAYR = this;
@@ -30,4 +34,5 @@
     }
   }
 
+  TSC2COMP(LAYR, VAYU);
 }

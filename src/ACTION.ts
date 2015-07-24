@@ -92,6 +92,7 @@ class Action {
     inertia: true
   };
 
+  public idle: boolean | number;
   private _inertia: boolean | number = true;
   private _cb: any;
   private _ev: any = {};
@@ -144,7 +145,9 @@ class Action {
   }
 
   private _callback(type: number, points: any) {
-    var c = this._cache;
+    var self: Action = this;
+    if (self.idle) return;
+    var c = self._cache;
 
     // prepare event details
     var $: IActionEventDetails = {
@@ -200,18 +203,19 @@ class Action {
     c.x = c.cX; c.y = c.cY; c.d = d; c.r = r;
 
     // fire event;
-    this._cb($);
+
+    (self.idle !== -1) && this._cb($);
 
 
     /* INERTIA */
     if (this._inertia) {
-      var q = this._queue, iFn: any = this._inertiaFn;
+      var q = this._queue, iFn: any = self._inertiaFn;
       
       // apply
       if ($.isLast) {
         var now = performance.now();
         // exit if to few events || to frequent last-event || or translate-only inertia
-        if (q.length < 3 || (iFn.active && (now - iFn.active) < 20) || (points.length && (this._inertia < 0)))
+        if (q.length < 3 || (iFn.active && (now - iFn.active) < 20) || (points.length && (self._inertia < 0)))
           return;
 
         // calc velocities
@@ -236,8 +240,8 @@ class Action {
           $.isMulti = !!points.length;
           delete $.points;
           delete $.timestamp;
-          this._ev = $;
-          this._inertiaFn(0, now);
+          self._ev = $;
+          self._inertiaFn(0, now);
           $.isFirst = false;
         }
 
@@ -273,7 +277,7 @@ class Action {
 
       // last event
     } else {
-      ev.isLast = !!iFn.active ;
+      ev.isLast = !!iFn.active;
       iFn.active = ev.x = ev.y = ev.r = 0;
       ev.s = 1;
     }
@@ -285,6 +289,9 @@ class Action {
 
 
 module Action {
+
+  export const version: string = "0.1.0";
+  console.log("%c ACTION [" + version + "] ", "color:#42b983;background-color:#333;font-weight:bold;font-size:15px;");
 
   // Definition of Event-Types
   export enum EVTYPE {

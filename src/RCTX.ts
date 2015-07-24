@@ -1,23 +1,24 @@
-﻿module VAYU {
+﻿
+
+module VAYU {
   "use strict"
 
 
-  @DVue()
   export class RCTX extends Vue {
 
     public _uid: number;
 
     public $root: VAYU;
     public $parent: VAYU;
-    public $children: VAYU.LAYR.ALAYR[];
+    public $children: VAYU.LAYR[];
 
     public update() { }
 
-    private static methods = {
+    protected static methods: any = {
       update: RCTX.prototype.update
     }
 
-    protected static events = {
+    protected static events: any = {
       "hook:created": function () {
         VAYU.unveil(this, "created");
         var self: RCTX = this;
@@ -36,23 +37,30 @@
     }
   }
 
+  TSC2COMP(RCTX, VAYU);
+
   export module RCTX {
 
     export enum TYPE {
       SVG,
       CANVAS,
+      /** not in use*/
       WEBGL
     }
 
-    @DVue(RCTX)
+    var STYLEMAP = {
+      "stroke": "strokeStyle",
+      "stroke-width": "lineWidth",
+      "fill": "fillStyle"
+    }
+
     export class SVG extends RCTX {
       protected static template = '<svg version="1.1" class="rctx" v-attr="width:$root.view.w,height:$root.view.h"><g v-repeat="layers" v-component="{{component||\'vayu-\'+(type==\'Feature\'?geometry.type:type)}}" track-by="_uid"></g></svg>';
       protected static replace = true;
     }
 
-    VAYU.component("vayu-rctx-" + TYPE[TYPE.SVG], SVG);
+    VAYU.component("vayu-rctx-" + TYPE[TYPE.SVG], TSC2COMP(SVG, VAYU));
 
-    @DVue(RCTX)
     export class CANVAS extends RCTX {
       protected static template = '<canvas class="rctx"><layer v-repeat="layers" v-component="{{component||(\'vayu-\' + type)}}" track-by="_uid"></layer></canvas>';
       protected static replace = true;
@@ -66,19 +74,22 @@
         self.$el.width = self.$root.view.w;
         self.$el.height = self.$root.view.h;
 
-        var layers = self.$children;
+        var layers = self.$children, ctx = self.$ctx;
 
-        for (var i = 0, l = layers.length; i < l; i++) {
-          if (layers[i].hide) { continue; }
-          self.$ctx.save();
+        for (var layer of layers) {
+          if (layer.hide) { continue; }
+          ctx.save();
 
+          var style_;
+          for (var style in layer.style)
+            (style_ = STYLEMAP[style] || style) in ctx && (ctx[style_] = layer.style[style])
 
-          layers[i].render(self.$ctx, self.$root.view);
+          layer.render(ctx, self.$root.view);
           self.$ctx.restore();
         }
       }
 
-      private static methods = {
+      protected static methods = {
         update: CANVAS.prototype.update
       }
 
@@ -90,6 +101,6 @@
       }
     }
 
-    VAYU.component("vayu-rctx-" + TYPE[TYPE.CANVAS], CANVAS);
+    VAYU.component("vayu-rctx-" + TYPE[TYPE.CANVAS], TSC2COMP(CANVAS, VAYU));
   }
 }

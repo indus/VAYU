@@ -1,4 +1,9 @@
 /// <reference path="../org/vue.d.ts" />
+/// <reference path="action.ts" />
+/// <reference path="rctx.ts" />
+/// <reference path="layr.ts" />
+/// <reference path="layr.tile.ts" />
+/// <reference path="layr.geojson.ts" />
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
@@ -17,19 +22,31 @@ Math.R2D = 180 / Math.PI;
 Math.D2R = Math.PI / 180;
 Math.PIx2 = Math.PI * 2;
 Math.PI_2 = Math.PI / 2;
-/** ES6 VueComponent decorator */
-function DVue(sup, opt) {
-    var sup = sup || Vue;
-    return function (voptclass) {
-        return sup
-            .extend(Object
-            .keys(voptclass)
-            .reduceRight(function (opt, key) {
-            sup.hasOwnProperty(key) || (opt[key] = voptclass[key]);
-            return opt;
-        }, opt || { name: voptclass.name }));
-    };
+//Monkey patch IE for support for Function.name
+if (Function.prototype["name"] === undefined && Object.defineProperty !== undefined) {
+    Object.defineProperty(Function.prototype, 'name', {
+        get: function () {
+            var funcNameRegex = /function\s([^(]{1,})\(/;
+            var results = (funcNameRegex).exec((this).toString());
+            return (results && results.length > 1) ? results[1].trim() : "";
+        },
+        set: function (value) { }
+    });
 }
+/* ES6 VueComponent decorator */
+function TSC2COMP(tsc, nsp, opt) {
+    var ppc = Object.getPrototypeOf(tsc.prototype).constructor;
+    var opt = Object
+        .keys(tsc)
+        .reduceRight(function (opt, key) {
+        ppc.hasOwnProperty(key) || (opt[key] = tsc[key]);
+        return opt;
+    }, opt || { name: tsc.name });
+    var vc = ppc.extend(opt);
+    nsp && (nsp[opt.name] = vc);
+    return vc;
+}
+function DVue(sup, opt) { return TSC2COMP; }
 ;
 /**
  * **VAYU** [0.3.0] - the main class
@@ -54,8 +71,8 @@ var VAYU = (function (_super) {
         v.cntrL = v.g2l([v.cx, v.cy]);
         this.center = v.cntrC;
     };
-    VAYU.temp = function (id) { return (document["currentScript"] || document.body).ownerDocument.getElementById("vayu_" + id); };
-    VAYU.template = VAYU.temp("VAYU");
+    //static temp = (id: string): HTMLElement => (document["currentScript"] || document.body).ownerDocument.getElementById("vayu_" + id);
+    VAYU.template = '<div class="vayu"v-class="action:class_action,inertia:class_inertia"><svg style="display:none"><defs><circle id="point"r="5"/></defs></svg><div v-repeat="layers|rctx"v-component="{{\'vayu-rctx-\'+_rctx}}"track-by="_uid"></div><content/></div>'; //VAYU.temp("VAYU");
     VAYU.replace = true;
     VAYU.data = function () {
         return {
@@ -81,8 +98,8 @@ var VAYU = (function (_super) {
                 if (!rctx)
                     return;
                 var _uid = layers[i]._uid;
-                if (!_uid) {
-                    Object.defineProperty(layers[i], '_uid', { value: _uid = this.$root._uid++ });
+                if (_uid === undefined) {
+                    Object.defineProperty(layers[i], '_uid', { value: _uid = ++this.$root._uid });
                 }
                 if (layergroup && layergroup._rctx == rctx) {
                     layergroup.layers.push(layers[i]);
@@ -137,9 +154,9 @@ var VAYU = (function (_super) {
         // init resize handler
         Vue.util.on(window, "resize", self._onResize);
         self._onResize();
-        this.$watch("layers", this.$root.update, { deep: true });
+        self.$watch("layers", this.$root.update, { deep: true });
         // init action handler (Action unifies various user inputs for map transform)
-        var action = new Action(self.$el, function (d) {
+        self.action = new Action(self.$el, function (d) {
             // apply action event to map transform;
             self.view.transform(d.x, d.y, d.s, d.r, d.clientX, d.clientY);
             if (d.isFirst || d.isLast) {
@@ -147,6 +164,12 @@ var VAYU = (function (_super) {
                 _this.class_inertia = d.isFirst && d.isInertia;
             }
         });
+        /*self.action.idle = -1;
+        setTimeout(function () {
+    
+          self.action.idle = false;
+    
+        }, 1500)*/
         // init the map transform
         var o = self.$options, center = v.c2l(o.center || [0, 0]), scale = Math.pow(2, o.zoom || 0), rotation = (o.rotation || 0) * Math.D2R;
         // apply the initial map transform
@@ -163,7 +186,7 @@ var VAYU;
     console.log("%c VAYU [" + VAYU.version + "] ", "color:#42b983;background-color:#333;font-weight:bold;font-size:20px;");
     VAYU.config = {
         debug: true,
-        verbose: true,
+        verbose: true || { ready: true },
     };
     VAYU.log = function () {
         var msg = [];
@@ -173,16 +196,18 @@ var VAYU;
         VAYU.config.debug && console.log.apply(console, msg);
     };
     VAYU.unveil = function (comp, hook, desc) {
-        VAYU.config.verbose && console.log("[" + ((desc || '') + comp.constructor.name) + (comp.id ? (" '" + comp.id + "' ") : " ") + hook + "]", comp);
+        ((VAYU.config.verbose === true) ||
+            (VAYU.config.verbose && VAYU.config.verbose[hook]))
+            && console.log("[" + ((desc || '') + comp.constructor.name) + (comp.id ? (" '" + comp.id + "' ") : " ") + hook + "]", comp);
     };
     var View = (function () {
         function View(crs, dim) {
             if (crs === void 0) { crs = new CRS.EPSG3857; }
             if (dim === void 0) { dim = 256; }
-            this.m = new Float64Array([1, 0, 0, 0, 1]); // transform matrix (a = d = m[0], c = -(b = [1]), e = [2], f = [3], d=[4])
-            this.ṁ = new Float64Array(4); // inverse transform matrix
-            this.m_ = new Float64Array(5); // temp
-            this.ṁ_ = new Float64Array(4); // temp
+            this.m = new Array(1, 0, 0, 0, 1); //: Float64Array = new Float64Array([1, 0, 0, 0, 1]); // transform matrix (a = d = m[0], c = -(b = [1]), e = [2], f = [3], d=[4])
+            this.ṁ = new Array(4); //: Float64Array = new Float64Array(4); // inverse transform matrix
+            this.m_ = new Array(5); //: Float64Array = new Float64Array(5); // temp
+            this.ṁ_ = new Array(4); //: Float64Array = new Float64Array(4); // temp
             //ṃ: Float64Array = new Float64Array([1, 0, 0, 0]); // delta transform matrix
             //ṃ_: Float64Array = new Float64Array(4); // temp
             this.s = 1; // scale as float
@@ -281,19 +306,20 @@ var VAYU;
                 v.s = s;
                 v.z = z;
                 v.r = r;
+                v.th = (Math.abs(Math.cos(v.r)) + Math.abs(Math.sin(v.r))) * (v.dim * v.s) / 2;
             }
             v.update && (v.update = Vue.nextTick(this.apply, this));
         };
         View.prototype.apply = function () {
             var v = this, m = v.m, ṁ = v.ṁ; //, ṃ = v.ṃ;
-            Vue.config.async = false;
+            //Vue.config.async = false;
             v.update = true;
             v.tranMX = "matrix(" + m[0] + "," + m[1] + "," + -m[1] + "," + m[0] + "," + m[2] + "," + m[3] + ")";
             //v.tranMX_ = "matrix(" + ṃ[0] + "," + ṃ[1] + "," + -ṃ[1] + "," + ṃ[0] + "," + ṃ[2] + "," + ṃ[3] + ")";
             v.tranUX = "matrix(" + ṁ[0] + "," + ṁ[1] + "," + -ṁ[1] + "," + ṁ[0] + ",0,0)";
             v.tranUS = "scale(" + 1 / v.s + ")";
             v.tranUR = "rotate(" + -v.r / Math.D2R + ")";
-            Vue.config.async = true;
+            //Vue.config.async = true;
         };
         // check if point is in rect (with threshold)
         View.prototype.contains = function (pnt, w, h, thld) {

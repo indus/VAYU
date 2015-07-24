@@ -4,14 +4,6 @@ var __extends = (this && this.__extends) || function (d, b) {
     __.prototype = b.prototype;
     d.prototype = new __();
 };
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") return Reflect.decorate(decorators, target, key, desc);
-    switch (arguments.length) {
-        case 2: return decorators.reduceRight(function(o, d) { return (d && d(o)) || o; }, target);
-        case 3: return decorators.reduceRight(function(o, d) { return (d && d(target, key)), void 0; }, void 0);
-        case 4: return decorators.reduceRight(function(o, d) { return (d && d(target, key, o)) || o; }, desc);
-    }
-};
 var VAYU;
 (function (VAYU) {
     "use strict";
@@ -40,20 +32,24 @@ var VAYU;
                 }, { deep: true });
             }
         };
-        RCTX = __decorate([
-            DVue()
-        ], RCTX);
         return RCTX;
     })(Vue);
     VAYU.RCTX = RCTX;
+    TSC2COMP(RCTX, VAYU);
     var RCTX;
     (function (RCTX) {
         (function (TYPE) {
             TYPE[TYPE["SVG"] = 0] = "SVG";
             TYPE[TYPE["CANVAS"] = 1] = "CANVAS";
+            /** not in use*/
             TYPE[TYPE["WEBGL"] = 2] = "WEBGL";
         })(RCTX.TYPE || (RCTX.TYPE = {}));
         var TYPE = RCTX.TYPE;
+        var STYLEMAP = {
+            "stroke": "strokeStyle",
+            "stroke-width": "lineWidth",
+            "fill": "fillStyle"
+        };
         var SVG = (function (_super) {
             __extends(SVG, _super);
             function SVG() {
@@ -61,13 +57,10 @@ var VAYU;
             }
             SVG.template = '<svg version="1.1" class="rctx" v-attr="width:$root.view.w,height:$root.view.h"><g v-repeat="layers" v-component="{{component||\'vayu-\'+(type==\'Feature\'?geometry.type:type)}}" track-by="_uid"></g></svg>';
             SVG.replace = true;
-            SVG = __decorate([
-                DVue(RCTX)
-            ], SVG);
             return SVG;
         })(RCTX);
         RCTX.SVG = SVG;
-        VAYU.component("vayu-rctx-" + TYPE[TYPE.SVG], SVG);
+        VAYU.component("vayu-rctx-" + TYPE[TYPE.SVG], TSC2COMP(SVG, VAYU));
         var CANVAS = (function (_super) {
             __extends(CANVAS, _super);
             function CANVAS() {
@@ -79,13 +72,17 @@ var VAYU;
                     return;
                 self.$el.width = self.$root.view.w;
                 self.$el.height = self.$root.view.h;
-                var layers = self.$children;
-                for (var i = 0, l = layers.length; i < l; i++) {
-                    if (layers[i].hide) {
+                var layers = self.$children, ctx = self.$ctx;
+                for (var _i = 0; _i < layers.length; _i++) {
+                    var layer = layers[_i];
+                    if (layer.hide) {
                         continue;
                     }
-                    self.$ctx.save();
-                    layers[i].render(self.$ctx, self.$root.view);
+                    ctx.save();
+                    var style_;
+                    for (var style in layer.style)
+                        (style_ = STYLEMAP[style] || style) in ctx && (ctx[style_] = layer.style[style]);
+                    layer.render(ctx, self.$root.view);
                     self.$ctx.restore();
                 }
             };
@@ -100,12 +97,9 @@ var VAYU;
                     self.$ctx = self.$el.getContext("2d");
                 }
             };
-            CANVAS = __decorate([
-                DVue(RCTX)
-            ], CANVAS);
             return CANVAS;
         })(RCTX);
         RCTX.CANVAS = CANVAS;
-        VAYU.component("vayu-rctx-" + TYPE[TYPE.CANVAS], CANVAS);
+        VAYU.component("vayu-rctx-" + TYPE[TYPE.CANVAS], TSC2COMP(CANVAS, VAYU));
     })(RCTX = VAYU.RCTX || (VAYU.RCTX = {}));
 })(VAYU || (VAYU = {}));

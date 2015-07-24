@@ -75,7 +75,10 @@ var Action = (function () {
         }
     }
     Action.prototype._callback = function (type, points) {
-        var c = this._cache;
+        var self = this;
+        if (self.idle)
+            return;
+        var c = self._cache;
         // prepare event details
         var $ = {
             x: 0,
@@ -125,15 +128,15 @@ var Action = (function () {
         c.d = d;
         c.r = r;
         // fire event;
-        this._cb($);
+        (self.idle !== -1) && this._cb($);
         /* INERTIA */
         if (this._inertia) {
-            var q = this._queue, iFn = this._inertiaFn;
+            var q = this._queue, iFn = self._inertiaFn;
             // apply
             if ($.isLast) {
                 var now = performance.now();
                 // exit if to few events || to frequent last-event || or translate-only inertia
-                if (q.length < 3 || (iFn.active && (now - iFn.active) < 20) || (points.length && (this._inertia < 0)))
+                if (q.length < 3 || (iFn.active && (now - iFn.active) < 20) || (points.length && (self._inertia < 0)))
                     return;
                 // calc velocities
                 var t = Date.now();
@@ -156,8 +159,8 @@ var Action = (function () {
                     $.isMulti = !!points.length;
                     delete $.points;
                     delete $.timestamp;
-                    this._ev = $;
-                    this._inertiaFn(0, now);
+                    self._ev = $;
+                    self._inertiaFn(0, now);
                     $.isFirst = false;
                 }
             }
@@ -216,6 +219,8 @@ var Action = (function () {
 })();
 var Action;
 (function (Action) {
+    Action.version = "0.1.0";
+    console.log("%c ACTION [" + Action.version + "] ", "color:#42b983;background-color:#333;font-weight:bold;font-size:15px;");
     // Definition of Event-Types
     (function (EVTYPE) {
         EVTYPE[EVTYPE["START"] = 1] = "START";
@@ -428,6 +433,11 @@ var Action;
 
 ///#source 1 1 /src/VAYU.js
 /// <reference path="../org/vue.d.ts" />
+/// <reference path="action.ts" />
+/// <reference path="rctx.ts" />
+/// <reference path="layr.ts" />
+/// <reference path="layr.tile.ts" />
+/// <reference path="layr.geojson.ts" />
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
@@ -446,19 +456,31 @@ Math.R2D = 180 / Math.PI;
 Math.D2R = Math.PI / 180;
 Math.PIx2 = Math.PI * 2;
 Math.PI_2 = Math.PI / 2;
-/** ES6 VueComponent decorator */
-function DVue(sup, opt) {
-    var sup = sup || Vue;
-    return function (voptclass) {
-        return sup
-            .extend(Object
-            .keys(voptclass)
-            .reduceRight(function (opt, key) {
-            sup.hasOwnProperty(key) || (opt[key] = voptclass[key]);
-            return opt;
-        }, opt || { name: voptclass.name }));
-    };
+//Monkey patch IE for support for Function.name
+if (Function.prototype["name"] === undefined && Object.defineProperty !== undefined) {
+    Object.defineProperty(Function.prototype, 'name', {
+        get: function () {
+            var funcNameRegex = /function\s([^(]{1,})\(/;
+            var results = (funcNameRegex).exec((this).toString());
+            return (results && results.length > 1) ? results[1].trim() : "";
+        },
+        set: function (value) { }
+    });
 }
+/* ES6 VueComponent decorator */
+function TSC2COMP(tsc, nsp, opt) {
+    var ppc = Object.getPrototypeOf(tsc.prototype).constructor;
+    var opt = Object
+        .keys(tsc)
+        .reduceRight(function (opt, key) {
+        ppc.hasOwnProperty(key) || (opt[key] = tsc[key]);
+        return opt;
+    }, opt || { name: tsc.name });
+    var vc = ppc.extend(opt);
+    nsp && (nsp[opt.name] = vc);
+    return vc;
+}
+function DVue(sup, opt) { return TSC2COMP; }
 ;
 /**
  * **VAYU** [0.3.0] - the main class
@@ -483,8 +505,8 @@ var VAYU = (function (_super) {
         v.cntrL = v.g2l([v.cx, v.cy]);
         this.center = v.cntrC;
     };
-    VAYU.temp = function (id) { return (document["currentScript"] || document.body).ownerDocument.getElementById("vayu_" + id); };
-    VAYU.template = VAYU.temp("VAYU");
+    //static temp = (id: string): HTMLElement => (document["currentScript"] || document.body).ownerDocument.getElementById("vayu_" + id);
+    VAYU.template = '<div class="vayu"v-class="action:class_action,inertia:class_inertia"><svg style="display:none"><defs><circle id="point"r="5"/></defs></svg><div v-repeat="layers|rctx"v-component="{{\'vayu-rctx-\'+_rctx}}"track-by="_uid"></div><content/></div>'; //VAYU.temp("VAYU");
     VAYU.replace = true;
     VAYU.data = function () {
         return {
@@ -510,8 +532,8 @@ var VAYU = (function (_super) {
                 if (!rctx)
                     return;
                 var _uid = layers[i]._uid;
-                if (!_uid) {
-                    Object.defineProperty(layers[i], '_uid', { value: _uid = this.$root._uid++ });
+                if (_uid === undefined) {
+                    Object.defineProperty(layers[i], '_uid', { value: _uid = ++this.$root._uid });
                 }
                 if (layergroup && layergroup._rctx == rctx) {
                     layergroup.layers.push(layers[i]);
@@ -566,9 +588,9 @@ var VAYU = (function (_super) {
         // init resize handler
         Vue.util.on(window, "resize", self._onResize);
         self._onResize();
-        this.$watch("layers", this.$root.update, { deep: true });
+        self.$watch("layers", this.$root.update, { deep: true });
         // init action handler (Action unifies various user inputs for map transform)
-        var action = new Action(self.$el, function (d) {
+        self.action = new Action(self.$el, function (d) {
             // apply action event to map transform;
             self.view.transform(d.x, d.y, d.s, d.r, d.clientX, d.clientY);
             if (d.isFirst || d.isLast) {
@@ -576,6 +598,12 @@ var VAYU = (function (_super) {
                 _this.class_inertia = d.isFirst && d.isInertia;
             }
         });
+        /*self.action.idle = -1;
+        setTimeout(function () {
+    
+          self.action.idle = false;
+    
+        }, 1500)*/
         // init the map transform
         var o = self.$options, center = v.c2l(o.center || [0, 0]), scale = Math.pow(2, o.zoom || 0), rotation = (o.rotation || 0) * Math.D2R;
         // apply the initial map transform
@@ -592,7 +620,7 @@ var VAYU;
     console.log("%c VAYU [" + VAYU.version + "] ", "color:#42b983;background-color:#333;font-weight:bold;font-size:20px;");
     VAYU.config = {
         debug: true,
-        verbose: true,
+        verbose: true || { ready: true },
     };
     VAYU.log = function () {
         var msg = [];
@@ -602,16 +630,18 @@ var VAYU;
         VAYU.config.debug && console.log.apply(console, msg);
     };
     VAYU.unveil = function (comp, hook, desc) {
-        VAYU.config.verbose && console.log("[" + ((desc || '') + comp.constructor.name) + (comp.id ? (" '" + comp.id + "' ") : " ") + hook + "]", comp);
+        ((VAYU.config.verbose === true) ||
+            (VAYU.config.verbose && VAYU.config.verbose[hook]))
+            && console.log("[" + ((desc || '') + comp.constructor.name) + (comp.id ? (" '" + comp.id + "' ") : " ") + hook + "]", comp);
     };
     var View = (function () {
         function View(crs, dim) {
             if (crs === void 0) { crs = new CRS.EPSG3857; }
             if (dim === void 0) { dim = 256; }
-            this.m = new Float64Array([1, 0, 0, 0, 1]); // transform matrix (a = d = m[0], c = -(b = [1]), e = [2], f = [3], d=[4])
-            this.ṁ = new Float64Array(4); // inverse transform matrix
-            this.m_ = new Float64Array(5); // temp
-            this.ṁ_ = new Float64Array(4); // temp
+            this.m = new Array(1, 0, 0, 0, 1); //: Float64Array = new Float64Array([1, 0, 0, 0, 1]); // transform matrix (a = d = m[0], c = -(b = [1]), e = [2], f = [3], d=[4])
+            this.ṁ = new Array(4); //: Float64Array = new Float64Array(4); // inverse transform matrix
+            this.m_ = new Array(5); //: Float64Array = new Float64Array(5); // temp
+            this.ṁ_ = new Array(4); //: Float64Array = new Float64Array(4); // temp
             //ṃ: Float64Array = new Float64Array([1, 0, 0, 0]); // delta transform matrix
             //ṃ_: Float64Array = new Float64Array(4); // temp
             this.s = 1; // scale as float
@@ -710,19 +740,20 @@ var VAYU;
                 v.s = s;
                 v.z = z;
                 v.r = r;
+                v.th = (Math.abs(Math.cos(v.r)) + Math.abs(Math.sin(v.r))) * (v.dim * v.s) / 2;
             }
             v.update && (v.update = Vue.nextTick(this.apply, this));
         };
         View.prototype.apply = function () {
             var v = this, m = v.m, ṁ = v.ṁ; //, ṃ = v.ṃ;
-            Vue.config.async = false;
+            //Vue.config.async = false;
             v.update = true;
             v.tranMX = "matrix(" + m[0] + "," + m[1] + "," + -m[1] + "," + m[0] + "," + m[2] + "," + m[3] + ")";
             //v.tranMX_ = "matrix(" + ṃ[0] + "," + ṃ[1] + "," + -ṃ[1] + "," + ṃ[0] + "," + ṃ[2] + "," + ṃ[3] + ")";
             v.tranUX = "matrix(" + ṁ[0] + "," + ṁ[1] + "," + -ṁ[1] + "," + ṁ[0] + ",0,0)";
             v.tranUS = "scale(" + 1 / v.s + ")";
             v.tranUR = "rotate(" + -v.r / Math.D2R + ")";
-            Vue.config.async = true;
+            //Vue.config.async = true;
         };
         // check if point is in rect (with threshold)
         View.prototype.contains = function (pnt, w, h, thld) {
@@ -862,14 +893,6 @@ var __extends = (this && this.__extends) || function (d, b) {
     __.prototype = b.prototype;
     d.prototype = new __();
 };
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") return Reflect.decorate(decorators, target, key, desc);
-    switch (arguments.length) {
-        case 2: return decorators.reduceRight(function(o, d) { return (d && d(o)) || o; }, target);
-        case 3: return decorators.reduceRight(function(o, d) { return (d && d(target, key)), void 0; }, void 0);
-        case 4: return decorators.reduceRight(function(o, d) { return (d && d(target, key, o)) || o; }, desc);
-    }
-};
 var VAYU;
 (function (VAYU) {
     "use strict";
@@ -898,20 +921,24 @@ var VAYU;
                 }, { deep: true });
             }
         };
-        RCTX = __decorate([
-            DVue()
-        ], RCTX);
         return RCTX;
     })(Vue);
     VAYU.RCTX = RCTX;
+    TSC2COMP(RCTX, VAYU);
     var RCTX;
     (function (RCTX) {
         (function (TYPE) {
             TYPE[TYPE["SVG"] = 0] = "SVG";
             TYPE[TYPE["CANVAS"] = 1] = "CANVAS";
+            /** not in use*/
             TYPE[TYPE["WEBGL"] = 2] = "WEBGL";
         })(RCTX.TYPE || (RCTX.TYPE = {}));
         var TYPE = RCTX.TYPE;
+        var STYLEMAP = {
+            "stroke": "strokeStyle",
+            "stroke-width": "lineWidth",
+            "fill": "fillStyle"
+        };
         var SVG = (function (_super) {
             __extends(SVG, _super);
             function SVG() {
@@ -919,13 +946,10 @@ var VAYU;
             }
             SVG.template = '<svg version="1.1" class="rctx" v-attr="width:$root.view.w,height:$root.view.h"><g v-repeat="layers" v-component="{{component||\'vayu-\'+(type==\'Feature\'?geometry.type:type)}}" track-by="_uid"></g></svg>';
             SVG.replace = true;
-            SVG = __decorate([
-                DVue(RCTX)
-            ], SVG);
             return SVG;
         })(RCTX);
         RCTX.SVG = SVG;
-        VAYU.component("vayu-rctx-" + TYPE[TYPE.SVG], SVG);
+        VAYU.component("vayu-rctx-" + TYPE[TYPE.SVG], TSC2COMP(SVG, VAYU));
         var CANVAS = (function (_super) {
             __extends(CANVAS, _super);
             function CANVAS() {
@@ -937,13 +961,17 @@ var VAYU;
                     return;
                 self.$el.width = self.$root.view.w;
                 self.$el.height = self.$root.view.h;
-                var layers = self.$children;
-                for (var i = 0, l = layers.length; i < l; i++) {
-                    if (layers[i].hide) {
+                var layers = self.$children, ctx = self.$ctx;
+                for (var _i = 0; _i < layers.length; _i++) {
+                    var layer = layers[_i];
+                    if (layer.hide) {
                         continue;
                     }
-                    self.$ctx.save();
-                    layers[i].render(self.$ctx, self.$root.view);
+                    ctx.save();
+                    var style_;
+                    for (var style in layer.style)
+                        (style_ = STYLEMAP[style] || style) in ctx && (ctx[style_] = layer.style[style]);
+                    layer.render(ctx, self.$root.view);
                     self.$ctx.restore();
                 }
             };
@@ -958,13 +986,10 @@ var VAYU;
                     self.$ctx = self.$el.getContext("2d");
                 }
             };
-            CANVAS = __decorate([
-                DVue(RCTX)
-            ], CANVAS);
             return CANVAS;
         })(RCTX);
         RCTX.CANVAS = CANVAS;
-        VAYU.component("vayu-rctx-" + TYPE[TYPE.CANVAS], CANVAS);
+        VAYU.component("vayu-rctx-" + TYPE[TYPE.CANVAS], TSC2COMP(CANVAS, VAYU));
     })(RCTX = VAYU.RCTX || (VAYU.RCTX = {}));
 })(VAYU || (VAYU = {}));
 
@@ -974,14 +999,6 @@ var __extends = (this && this.__extends) || function (d, b) {
     function __() { this.constructor = d; }
     __.prototype = b.prototype;
     d.prototype = new __();
-};
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") return Reflect.decorate(decorators, target, key, desc);
-    switch (arguments.length) {
-        case 2: return decorators.reduceRight(function(o, d) { return (d && d(o)) || o; }, target);
-        case 3: return decorators.reduceRight(function(o, d) { return (d && d(target, key)), void 0; }, void 0);
-        case 4: return decorators.reduceRight(function(o, d) { return (d && d(target, key, o)) || o; }, desc);
-    }
 };
 var VAYU;
 (function (VAYU) {
@@ -1005,29 +1022,18 @@ var VAYU;
                 VAYU.unveil(this, "ready");
             }
         };
-        LAYR = __decorate([
-            DVue()
-        ], LAYR);
         return LAYR;
     })(Vue);
     VAYU.LAYR = LAYR;
+    TSC2COMP(LAYR, VAYU);
 })(VAYU || (VAYU = {}));
 
 ///#source 1 1 /src/LAYR.TILE.js
-/// <reference path="vayu.ts" />
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
     __.prototype = b.prototype;
     d.prototype = new __();
-};
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") return Reflect.decorate(decorators, target, key, desc);
-    switch (arguments.length) {
-        case 2: return decorators.reduceRight(function(o, d) { return (d && d(o)) || o; }, target);
-        case 3: return decorators.reduceRight(function(o, d) { return (d && d(target, key)), void 0; }, void 0);
-        case 4: return decorators.reduceRight(function(o, d) { return (d && d(target, key, o)) || o; }, desc);
-    }
 };
 var VAYU;
 (function (VAYU) {
@@ -1039,7 +1045,7 @@ var VAYU;
                 _super.apply(this, arguments);
             }
             TILE.prototype.render = function (ctx, v) {
-                var vdim = v.dim, tdim = vdim * v.s * 1.004, m0 = v.m[0] * vdim, m1 = v.m[1] * vdim, m2 = v.m[2], m3 = v.m[3], th = (Math.abs(Math.cos(v.r)) + Math.abs(Math.sin(v.r))) * tdim / 2, url = this.url, cache = this._cache, reqQueue = this.$root.reqQueue, z = 0, x = 0, y = 0, dir = true, min = Math.max(0, Math.min(18, Math.round(v.z))), bbox = this._tbox ? this._tbox[Math.round(v.z)] : null;
+                var vdim = v.dim, tdim = vdim * v.s, m0 = v.m[0] * vdim, m1 = v.m[1] * vdim, m2 = v.m[2], m3 = v.m[3], th = v.th, url = this.url, cache = this._cache, reqQueue = this.$root.reqQueue, dir = true, z = Math.round(v.z + this.zoff), min = Math.max(0, Math.min(19, z)), bbox = this._tbox ? this._tbox[z] : null, z = 0, x = 0, y = 0;
                 if (typeof url !== "function")
                     return;
                 var x_, y_, cid, img, src;
@@ -1056,12 +1062,15 @@ var VAYU;
                             ctx.rotate(v.r);
                             if ((img = cache[(cid = z + "." + x + "." + y)]) && img.complete && img.width && img.height) {
                                 ctx.drawImage(img, -tdim / 2, -tdim / 2, tdim, tdim);
-                                if (!cache[cid = (z - 1 + "." + (x >> 1) + "." + (y >> 1))] && (reqQueue.length < (reqQueue.max / 2)) && (src = url(z, x, y))) {
-                                    img = new Image();
-                                    img.src = src;
-                                    img["preload"] = true;
-                                    img.onload = img.onerror = this._onTile;
-                                    reqQueue.push(cache[cid] = img);
+                                if ((reqQueue.length < (reqQueue.max / 2))) {
+                                    // parent
+                                    if (!cache[cid = (z - 1 + "." + (x >> 1) + "." + (y >> 1))] && (src = url(z - 1, x >> 1, y >> 1))) {
+                                        img = new Image();
+                                        img.src = src;
+                                        img["preload"] = true;
+                                        img.onload = img.onerror = this._onTile;
+                                        reqQueue.push(cache[cid] = img);
+                                    }
                                 }
                             }
                             else {
@@ -1171,20 +1180,17 @@ var VAYU;
                     var self = this;
                     self.url || self.$add('url');
                     self.$watch('url', self._onUrl, { immediate: true });
-                    self.bbox && self.$watch('bbox', self._bbox2tbox, { immediate: true });
+                    self.bbox && self.$watch('bbox', self._onBBox, { immediate: true });
                     //self.src && self.$watch('src', self._src2url, { immediate: true });
                 },
                 "hook:beforeDestroy": function () {
                     this.$parent.update();
                 }
             };
-            TILE = __decorate([
-                DVue(VAYU.LAYR)
-            ], TILE);
             return TILE;
         })(VAYU.LAYR);
         LAYR.TILE = TILE;
-        VAYU.component("vayu-TILE", TILE);
+        VAYU.component("vayu-TILE", TSC2COMP(TILE, LAYR));
     })(LAYR = VAYU.LAYR || (VAYU.LAYR = {}));
 })(VAYU || (VAYU = {}));
 
